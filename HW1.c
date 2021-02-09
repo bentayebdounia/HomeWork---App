@@ -6,76 +6,36 @@
 #include <pthread.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 #include <stdbool.h>
 #include "remplirMtrix.h"
 #include "sequentielle.h"
-#include "equal.h"
+#include "functions.h"
 #include "printMatrix.h"
+#include "parallele_v1.h"
+#include "parallele_v2.h"
+#include "parallele_v3.h"
 
 
-	int   **A	, **B 	, 	**C 	, **D  ,  n  , p  ; 
-
-	
-	
-			
- 
-		/*la méthode de calcule de multiplication en paralléle*/
-
-	void * fonctionMult ( void *th ) {
-
-		long tid ;
-		tid = (long) th ;
-
-		int i, j , k , blockSize , reste , idebut , ifin ;	
-    
-		
-	        blockSize = n/p ;    //calcule de block 
-		reste = n % p ;
-		idebut = tid * blockSize ;   //debut de block
-		ifin = idebut + blockSize - 1 + reste ;   //la fin de block
-		
-		for (  i = idebut ;  i <= ifin ; i++ ) {     
-			
-			for ( j=0 ; j < n ; j++ ) {
-
-				C[i][j]=0 ;
-
-				for ( k=0 ; k < n ; k++ ) {
-					C[i][j]= C[i][j] + A[i][k] * B[k][j] ;
-					//printf ( " thread %lu : %d \n" , tid, C[i][j]); 	
-
-				}	
-			
-			}
-		}
-
-		pthread_exit(NULL);
-
-	}
-
-       
-
-/* une fonction qui tester est ce que le calcule de la matrice c en parallele c'est le meme en sequentielle  */
+	int   **A	, **B 	, 	**C 	, **D  ,  n  , p    ;
+	double debut1 , debut2 , fin1 , fin2 ; 
 
 	
+  int main()  {
 
-  int main()
- {
-  	int i , j  , rc  ,k  ; 
-	long tid ;
+  	int i , j   ,k  ; 
+	
 	double debut , fin ;
 		
-	char choix [1] ; 
+	char choix [1], v[2] ; 
 
 	
-	printf("Matrix size = \n");     // la taille de matrice 
+	printf("Matrix size = \n");    			 // la taille de matrice 
 	scanf( "%d", &n );
 
-	printf( "le nombre de threads = \n" );    // le nombre du threads 
-	scanf( "%d", &p );
 
 	printf ( " choisi la méthode de calcule s or p " );
-        scanf( "%s" , choix );
+    scanf( "%s" , choix ); 									// entrer  le choix de calcul
 
 		/* la creation des matrice  */
 
@@ -101,56 +61,128 @@
 	
 	printf(" ..... matrix A \n");
 	
-	generateRandomMatrix(A, n, 0, 99);  //méthode pour remplir A aléatoirement
+	generateRandomMatrix(A, n, 0, 99);  	//méthode pour remplir A aléatoirement
 	//printMatrix(A);
 
 	printf(" ..... matrix B \n ");
 
-	generateRandomMatrix(B, n, 0, 99);
+	generateRandomMatrix(B, n, 0, 99);			//méthode pour remplir B aléatoirement
 	//printMatrix(B);
 
 			
 	
 /*calcule multiplication en parallele */
 	
-	if ( (!strcmp (choix , "P")) || (!strcmp (choix , "p")) ) { 
-	printf("\n \t calcule de matrice C en parallele \n" );
-	pthread_t threads[p];
+	if ( (!strcmp (choix , "P")) || (!strcmp (choix , "p")) ) { 		//tester le choix du calcule 
+		 
+		printf( " vous voulez quelle version de calcul parallele : \n v1 , v2 ou v3 \n" );
+		scanf ( "%s",v); 		// entrer le choix de version de calcul parallele 
 
-	debut = clock();
+		if ( (!strcmp (v , "V1")) || (!strcmp (v , "v1")) ){  				 //tester le choix de version de calcul en parellele
+			printf( "entrer le nombre de threads  : \n" );   	 // le nombre du threads 
+			scanf( "%d", &p );
+			
+			printf("\n \t calcule de matrice C en parallele \n" );
+			debut2 = clock ();
+			creation_threads(  C , A , B ,  n ,  p );
+			fin2 = clock();
 
-	for(tid = 0 ; tid < p ; tid++ ) { 
+			debut1 = clock();
+			seqMult ( D , A , B , n );
+			fin1 = clock();
 
+			printf("temps parallele = %f\n", (double)(fin2-debut2)/CLOCKS_PER_SEC);  //le calcule de temps parallele
+			printf("temps sequentielle  = %f\n", (double)(fin1-debut1)/CLOCKS_PER_SEC);  //le calcule de temps séquentielle
+			printf( "speedup = %f \n" , ((double)(fin1-debut1)/CLOCKS_PER_SEC) / ((double)(fin2-debut2)/CLOCKS_PER_SEC) );  	//calcule de speedup
+			
 
-	      rc = pthread_create ( &threads[tid] , NULL , fonctionMult , (void *)tid ); 	// creation de thread 
-	      
-	      if (rc){ 
-                    	printf("Erreur de creation de thread; code erreur = %d\n" , rc); 
-	            	exit(-1); 
-              } 
-	 } 
-	 
-	 
-	 for( tid = 0 ; tid < p ; tid++ ) { 
-	      (void)pthread_join( threads[tid] , NULL);    //la joiture du thread
-         }
+			printMatrix(C , n ) ;
+			fonctionEqual( D , C , n );
+		}
 
-	fin =  clock(); 
- 	printMatrix(C , n ) ;
+		if ( (!strcmp (v , "V2")) || (!strcmp (v , "v2")) ){  //tester le choix de version de calcul en parellele
 
-	printf("temps parallele=%f\n", (double)(fin-debut)/CLOCKS_PER_SEC);  //le calcule de temps parallele 
-	seqMult ( D , A , B , n );
-	fonctionEqual( D , C , n );
+			printf( "Entrer le nombre de threads ( le nombre de threads faut etre de la puissance de deux ) : \n" );    // le nombre du threads 
+			scanf( "%d", &p );
+
+			while (IsPowerOfTwo ( p ) == false) {     //tester si le nombre des threads est de puissance de 2
+				printf( "le nombre de threads faut etre de puissance de deux : \n" );    // le nombre du threads 
+				scanf( "%d", &p );
+			}
+
+			printf("\n \t calcule de matrice C en parallele \n" );
+			debut2 = clock ();
+			creation_threads2(  C , A , B ,  n ,  p );  	 //méthode de création des threads et de calcul parallele de version 2
+			fin2 = clock ();
+
+			debut1 = clock();
+			seqMult ( D , A , B , n );  					// méthode de calcule de multiplication en séquentielle 
+			fin1 = clock();
+
+			printf("temps parallele = %f\n", (double)(fin2-debut2)/CLOCKS_PER_SEC);  //le calcule de temps parallele
+			printf("temps sequentielle  = %f\n", (double)(fin1-debut1)/CLOCKS_PER_SEC);  //le calcule de temps séquentielle
+			printf( "speedup = %f \n" , ((double)(fin1-debut1)/CLOCKS_PER_SEC) / ((double)(fin2-debut2)/CLOCKS_PER_SEC) );	//le calcule de speedup
+			
+			printMatrix(C , n ) ;       				   //affichage de matrice résultat 
+			fonctionEqual( D , C , n );  				  //tester est ce que la matrice resultat est la meme dans les deux façon de calcule 
+		}
+
+		if ( (!strcmp (v , "V3")) || (!strcmp (v , "v3")) ){   			//tester le choix de version de calcul en parellele
+
+			printf( " Entrer le nombre de threads ( le nombre de threads faut etre pair)  : \n" );   	 	// le nombre du threads 
+			scanf( "%d", &p );
+
+			while (pair ( p ) == false) {
+				printf( "le nombre de threads faut etre pair : \n" );   	 // le nombre du threads 
+				scanf( "%d", &p );
+			}
+
+			printf("\n \t calcule de matrice C en parallele \n" );
+
+			debut2 = clock();
+			creation_threads3(  C , A , B ,  n ,  p );
+			fin2 = clock ();
+
+			debut1 = clock();
+			seqMult ( D , A , B , n ); 			 // méthode de calcule de multiplication en séquentielle 
+			fin1 = clock();
+
+			printf("temps parallele = %f\n", (double)(fin2-debut2)/CLOCKS_PER_SEC);  //le calcule de temps parallele
+			printf("temps sequentielle  = %f\n", (double)(fin1-debut1)/CLOCKS_PER_SEC);  //le calcule de temps séquentielle
+			printf( "speedup = %f \n" , ((double)(fin1-debut1)/CLOCKS_PER_SEC) / ((double)(fin2-debut2)/CLOCKS_PER_SEC) );  	//le calcule de speedup
+			
+			printMatrix( C , n )  ;				//affichage de matrice résultat 
+			fonctionEqual( D , C , n ); 	   //tester est ce que la matrice resultat est la meme dans les deux façon de calcule
+
+		}
+
  }
       
 /*calcule multiplication en séquentielle */
 
 	else  {
 			printf("\n \t calcule de matrice C en séquentielle \n" );
-	
-			seqMult ( D , A , B , n );
+			printf( " Entrer le nombre de threads  : \n" );    // le nombre du threads 
+			scanf( "%d", &p );
+
+			debut1 = clock();
+			seqMult ( D , A , B , n );			 // méthode de calcule de multiplication en séquentielle 
+			
+			fin1 = clock();
+			debut2 = clock();
+			
+			creation_threads(  C , A , B ,  n ,  p );   //méthode de création des threads et de calcul parallele de version 1
+			fin2 = clock();
+			
+			printf("temps sequentielle = %f\n", (double)(fin1-debut1)/CLOCKS_PER_SEC);  //le calcule de temps séquentielle
+			printf("temps parallele = %f\n", (double)(fin2-debut2)/CLOCKS_PER_SEC);  //le calcule de temps parallele
+			printf( "speedup = %f \n" , ((double)(fin1-debut1)/CLOCKS_PER_SEC) / ((double)(fin2-debut2)/CLOCKS_PER_SEC) ); 	//le calcule de speedup
+			
+			printMatrix( D , n )  ;				//affichage de matrice résultat 
+			fonctionEqual( D , C , n ); 	   //tester est ce que la matrice resultat est la meme dans les deux façon de calcule
+			
       
-}
+        }
 
 		
         
